@@ -1,0 +1,16 @@
+lg - read status from LG appliances and record to influxdb
+
+* Install
+bundle install
+* Authorize
+./lg.rb authorize --no-log --verbose
+* Scan
+Usage:
+  lg.rb record-status
+
+Options:
+      [--log], [--no-log]          # log output to ~/.log/.nest.log
+                                   # Default: true
+  -v, [--verbose], [--no-verbose]  # increase verbosity
+
+Record status data to database
