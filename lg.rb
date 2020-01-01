@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'logger'
 require 'wideq'
@@ -81,22 +82,26 @@ class LG < Thor
       rescue WIDEQ::DeviceNotConnectedError
         $logger.info "#{device.name} is not connected"
         timestamp = Time.now.to_i
-        data = [{series: 'state',              values: { value:   0 }, tags: tags, timestamp: timestamp },
-                {series: 'state_description',  values: { value: '-' }, tags: tags, timestamp: timestamp }]
+        data = [{ series: 'state',              values: { value: 0   }, tags: tags, timestamp: timestamp },
+                { series: 'state_description',  values: { value: '-' }, tags: tags, timestamp: timestamp }]
+        $logger.debug data
+        influxdb.write_points data
+
+        data = nil
         case device.type
         when :DRYER
-          data.push({series: 'course',             values: { value:   0 }, tags: tags, timestamp: timestamp },
-                    {series: 'course_description', values: { value: '-' }, tags: tags, timestamp: timestamp })
+          data = [{ series: 'course',             values: { value: 0   }, tags: tags, timestamp: timestamp },
+                  { series: 'course_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
         when :WASHER
-          data.push({series: 'apcourse',             values: { value:   0 }, tags: tags, timestamp: timestamp },
-                    {series: 'apcourse_description', values: { value: '-' }, tags: tags, timestamp: timestamp })
+          data = [{ series: 'apcourse',             values: { value: 0   }, tags: tags, timestamp: timestamp },
+                  { series: 'apcourse_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
         end
         $logger.debug data
         influxdb.write_points data
       else
         begin
           iters = 0
-          while iters == 0
+          while iters.zero?
             sleep 1
             $logger.info 'polling...'
             data = mon.poll
@@ -114,8 +119,8 @@ class LG < Thor
                 if desc.is_a? WIDEQ::EnumValue
                   $logger.info "- ENUM: #{key}: #{value} / #{desc.options[value.to_s]}"
                   if key == 'State'
-                    data = [{series: 'state',             values: { value: value },                    tags: tags, timestamp: timestamp },
-                            {series: 'state_description', values: { value: desc.options[value.to_s] }, tags: tags, timestamp: timestamp }]
+                    data = [{ series: 'state',             values: { value: value },                    tags: tags, timestamp: timestamp },
+                            { series: 'state_description', values: { value: desc.options[value.to_s] }, tags: tags, timestamp: timestamp }]
                     $logger.debug data
                     influxdb.write_points data
                   end
@@ -125,8 +130,8 @@ class LG < Thor
                   $logger.info "- REFERENCE: #{key}: #{value} / #{model.reference_name(key, value.to_s)}"
                   if key.include? 'Course'
                     series = key.downcase
-                    data = [{series: series,                  values: { value: value },                                 tags: tags, timestamp: timestamp },
-                            {series: "#{series}_description", values: { value: model.reference_name(key, value.to_s) }, tags: tags, timestamp: timestamp }]
+                    data = [{ series: series,                  values: { value: value },                                 tags: tags, timestamp: timestamp },
+                            { series: "#{series}_description", values: { value: model.reference_name(key, value.to_s) }, tags: tags, timestamp: timestamp }]
                     $logger.debug data
                     influxdb.write_points data
                   end
