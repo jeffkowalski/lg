@@ -144,6 +144,8 @@ class LG < Thor
               end
             end
           end
+        rescue StandardError => e
+          @logger.error e
         ensure
           mon.stop
         end
@@ -172,6 +174,8 @@ class LG < Thor
     rescue WIDEQ::NotLoggedInError
       $logger.info 'Session expired, refreshing'
       client.refresh
+    rescue StandardError => e
+      @logger.error e
     end
 
     # Save the updated state.
