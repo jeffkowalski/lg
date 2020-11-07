@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# HACK: use local config to downgrade ssl version to accomodate LG server
+ENV['OPENSSL_CONF'] = 'openssl.cnf'
+
 require 'logger'
 require 'wideq'
 require 'influxdb'
@@ -191,5 +194,4 @@ class LG < Thor
   end
 end
 
-ENV['OPENSSL_CONF'] = 'openssl.cnf'
 LG.start
