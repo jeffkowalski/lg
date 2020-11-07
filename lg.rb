@@ -191,4 +191,5 @@ class LG < Thor
   end
 end
 
+ENV['OPENSSL_CONF'] = 'openssl.cnf'
 LG.start
