@@ -69,7 +69,7 @@ class LG < Thor
       device = client.get_device(device_id)
       model = client.model_info device
 
-      influxdb = InfluxDB::Client.new 'lge'
+      influxdb = InfluxDB::Client.new 'lge' unless options[:dry_run]
       tags = { device_id: device.id,
                device_name: device.name,
                device_type: device.type,
@@ -85,7 +85,7 @@ class LG < Thor
         data = [{ series: 'state',              values: { value: 0   }, tags: tags, timestamp: timestamp },
                 { series: 'state_description',  values: { value: '-' }, tags: tags, timestamp: timestamp }]
         $logger.debug data
-        influxdb.write_points data
+        influxdb.write_points data unless options[:dry_run]
 
         data = nil
         case device.type
@@ -97,7 +97,7 @@ class LG < Thor
                   { series: 'apcourse_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
         end
         $logger.debug data
-        influxdb.write_points data
+        influxdb.write_points data unless options[:dry_run]
       else
         begin
           iters = 0
@@ -122,7 +122,7 @@ class LG < Thor
                     data = [{ series: 'state',             values: { value: value },                    tags: tags, timestamp: timestamp },
                             { series: 'state_description', values: { value: desc.options[value.to_s] }, tags: tags, timestamp: timestamp }]
                     $logger.debug data
-                    influxdb.write_points data
+                    influxdb.write_points data unless options[:dry_run]
                   end
                 elsif desc.is_a? WIDEQ::RangeValue
                   $logger.info "- RANGE #{key}: #{value} (#{desc.min} - #{desc.max})"
@@ -133,7 +133,7 @@ class LG < Thor
                     data = [{ series: series,                  values: { value: value },                                 tags: tags, timestamp: timestamp },
                             { series: "#{series}_description", values: { value: model.reference_name(key, value.to_s) }, tags: tags, timestamp: timestamp }]
                     $logger.debug data
-                    influxdb.write_points data
+                    influxdb.write_points data unless options[:dry_run]
                   end
                 elsif desc.is_a? WIDEQ::BitValue
                   # $logger.info "- BIT: #{key}: #{value} #{desc.options[value.to_s]} / #{model.bit_name key, value, value.to_s}"
@@ -154,6 +154,7 @@ class LG < Thor
   end
 
   desc 'record-status', 'record the current usage data to database'
+  method_option :dry_run, type: :boolean, aliases: '-n', desc: "don't log to database"
   def record_status
     setup_logger
 
