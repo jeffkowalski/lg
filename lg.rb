@@ -13,6 +13,21 @@ require 'yaml'
 LOGFILE = File.join(Dir.home, '.log', 'lg.log')
 CREDENTIALS_PATH = File.join(Dir.home, '.credentials', 'lg.yaml')
 
+module Kernel
+  def with_rescue(exceptions, logger, retries: 5)
+    try = 0
+    begin
+      yield try
+    rescue *exceptions => e
+      try += 1
+      raise if try > retries
+
+      logger.info "caught error #{e.class}, retrying (#{try}/#{retries})..."
+      retry
+    end
+  end
+end
+
 class LG < Thor
   no_commands do
     def redirect_output
@@ -30,7 +45,7 @@ class LG < Thor
     def setup_logger
       redirect_output if options[:log]
 
-      @logger = Logger.new STDOUT
+      @logger = Logger.new $stdout
       @logger.level = options[:verbose] ? Logger::DEBUG : Logger::INFO
       @logger.info 'starting'
     end
@@ -49,7 +64,7 @@ class LG < Thor
     puts 'Log in here:'
     puts login_url
     puts 'Then paste the URL where the browser is redirected:'
-    callback_url = STDIN.gets.chomp
+    callback_url = $stdin.gets.chomp
     client._auth = WIDEQ::Auth.from_url gateway, callback_url
     state = client.dump
     File.open(CREDENTIALS_PATH, 'w') { |file| file.write state.to_yaml }
@@ -83,11 +98,11 @@ class LG < Thor
       begin
         mon.start
       rescue WIDEQ::DeviceNotConnectedError
-        $logger.info "#{device.name} is not connected"
+        @logger.info "#{device.name} is not connected"
         timestamp = Time.now.to_i
         data = [{ series: 'state',              values: { value: 0   }, tags: tags, timestamp: timestamp },
                 { series: 'state_description',  values: { value: '-' }, tags: tags, timestamp: timestamp }]
-        $logger.debug data
+        @logger.debug data
         influxdb.write_points data unless options[:dry_run]
 
         data = nil
@@ -99,15 +114,17 @@ class LG < Thor
           data = [{ series: 'apcourse',             values: { value: 0   }, tags: tags, timestamp: timestamp },
                   { series: 'apcourse_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
         end
-        $logger.debug data
+        @logger.debug data
         influxdb.write_points data unless options[:dry_run]
       else
         begin
           iters = 0
           while iters.zero?
             sleep 1
-            $logger.info 'polling...'
-            data = mon.poll
+            @logger.info 'polling...'
+            with_rescue([WIDEQ::DeviceNotConnectedError], @logger) do |_try|
+              data = mon.poll
+            end
             next if data.nil?
 
             timestamp = Time.now.to_i
@@ -115,34 +132,35 @@ class LG < Thor
             begin
               res = model.decode_monitor(data)
             rescue WIDEQ::MonitorError => e
-              $logger.warn "error decoding exception #{e}"
+              @logger.warn "error decoding exception #{e}"
             else
               res.each do |key, value|
                 desc = model.value(key)
-                if desc.is_a? WIDEQ::EnumValue
-                  $logger.info "- ENUM: #{key}: #{value} / #{desc.options[value.to_s]}"
+                case desc.class.to_s
+                when 'WIDEQ::EnumValue'
+                  @logger.info "- ENUM: #{key}: #{value} / #{desc.options[value.to_s]}"
                   if key == 'State'
                     data = [{ series: 'state',             values: { value: value },                    tags: tags, timestamp: timestamp },
                             { series: 'state_description', values: { value: desc.options[value.to_s] }, tags: tags, timestamp: timestamp }]
-                    $logger.debug data
+                    @logger.debug data
                     influxdb.write_points data unless options[:dry_run]
                   end
-                elsif desc.is_a? WIDEQ::RangeValue
-                  $logger.info "- RANGE #{key}: #{value} (#{desc.min} - #{desc.max})"
-                elsif desc.is_a? WIDEQ::ReferenceValue
-                  $logger.info "- REFERENCE: #{key}: #{value} / #{model.reference_name(key, value.to_s)}"
+                when 'WIDEQ::RangeValue'
+                  @logger.info "- RANGE #{key}: #{value} (#{desc.min} - #{desc.max})"
+                when 'WIDEQ::ReferenceValue'
+                  @logger.info "- REFERENCE: #{key}: #{value} / #{model.reference_name(key, value.to_s)}"
                   if key.include? 'Course'
                     series = key.downcase
                     data = [{ series: series,                  values: { value: value },                                 tags: tags, timestamp: timestamp },
                             { series: "#{series}_description", values: { value: model.reference_name(key, value.to_s) }, tags: tags, timestamp: timestamp }]
-                    $logger.debug data
+                    @logger.debug data
                     influxdb.write_points data unless options[:dry_run]
                   end
-                elsif desc.is_a? WIDEQ::BitValue
-                  # $logger.info "- BIT: #{key}: #{value} #{desc.options[value.to_s]} / #{model.bit_name key, value, value.to_s}"
-                  $logger.info "- BIT: #{key}: #{value} #{desc.options[value.to_s]}"
+                when 'WIDEQ::BitValue'
+                  # @logger.info "- BIT: #{key}: #{value} #{desc.options[value.to_s]} / #{model.bit_name key, value, value.to_s}"
+                  @logger.info "- BIT: #{key}: #{value} #{desc.options[value.to_s]}"
                 else
-                  $logger.info "- UNDECODABLE #{key}: #{value}"
+                  @logger.info "- UNDECODABLE #{desc} #{key}: #{value}"
                 end
               end
             end
@@ -176,7 +194,7 @@ class LG < Thor
     begin
       ls client
     rescue WIDEQ::NotLoggedInError
-      $logger.info 'Session expired, refreshing'
+      @logger.info 'Session expired, refreshing'
       client.refresh
     rescue StandardError => e
       @logger.error e
