@@ -186,8 +186,8 @@ class LG < Thor
     end
 
     client = WIDEQ::Client.load(state)
-    pp state
-    pp client._auth
+    @logger.debug state
+    @logger.debug client._auth
     # Log in if we don't already have an authentication
     raise WIDEQ::NotLoggedInError unless client._auth
 
@@ -204,7 +204,7 @@ class LG < Thor
     state = client.dump
     File.open(CREDENTIALS_PATH, 'w') { |file| file.write state.to_yaml }
 
-    # pp client
+    @logger.debug client
 
     client.devices.each do |device|
       mon client, device.id
