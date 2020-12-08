@@ -97,38 +97,17 @@ class LG < Thor
 
       begin
         mon.start
-      rescue WIDEQ::DeviceNotConnectedError
-        @logger.info "#{device.name} is not connected"
-        timestamp = Time.now.to_i
-        data = [{ series: 'state',              values: { value: 0   }, tags: tags, timestamp: timestamp },
-                { series: 'state_description',  values: { value: '-' }, tags: tags, timestamp: timestamp }]
-        @logger.debug data
-        influxdb.write_points data unless options[:dry_run]
-
-        data = nil
-        case device.type
-        when :DRYER
-          data = [{ series: 'course',             values: { value: 0   }, tags: tags, timestamp: timestamp },
-                  { series: 'course_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
-        when :WASHER
-          data = [{ series: 'apcourse',             values: { value: 0   }, tags: tags, timestamp: timestamp },
-                  { series: 'apcourse_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
-        end
-        @logger.debug data
-        influxdb.write_points data unless options[:dry_run]
-      else
         begin
-          iters = 0
-          while iters.zero?
+          got_data = false
+          until got_data
             sleep 1
             @logger.info 'polling...'
-            with_rescue([WIDEQ::DeviceNotConnectedError], @logger) do |_try|
-              data = mon.poll
-            end
+            data = mon.poll
+            timestamp = Time.now.to_i
             next if data.nil?
 
-            timestamp = Time.now.to_i
-            iters += 1
+            got_data = true
+
             begin
               res = model.decode_monitor(data)
             rescue WIDEQ::MonitorError => e
@@ -165,14 +144,31 @@ class LG < Thor
               end
             end
           end
-        rescue StandardError => e
-          @logger.error e
         ensure
           mon.stop
         end
-      end
-    end
-  end
+      rescue WIDEQ::DeviceNotConnectedError
+        @logger.info "#{device.name} is not connected"
+        timestamp = Time.now.to_i
+        data = [{ series: 'state',              values: { value: 0   }, tags: tags, timestamp: timestamp },
+                { series: 'state_description',  values: { value: '-' }, tags: tags, timestamp: timestamp }]
+        @logger.debug data
+        influxdb.write_points data unless options[:dry_run]
+
+        data = nil
+        case device.type
+        when :DRYER
+          data = [{ series: 'course',             values: { value: 0   }, tags: tags, timestamp: timestamp },
+                  { series: 'course_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
+        when :WASHER
+          data = [{ series: 'apcourse',             values: { value: 0   }, tags: tags, timestamp: timestamp },
+                  { series: 'apcourse_description', values: { value: '-' }, tags: tags, timestamp: timestamp }]
+        end
+        @logger.debug data
+        influxdb.write_points data unless options[:dry_run]
+      end # begin main block
+    end # def mon
+  end # no_commands
 
   desc 'record-status', 'record the current usage data to database'
   method_option :dry_run, type: :boolean, aliases: '-n', desc: "don't log to database"
