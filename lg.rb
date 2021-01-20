@@ -74,7 +74,7 @@ class LG < Thor
   # List the client devices
   no_commands do
     def ls(client)
-      client.devices.each do |device|
+      client.devices&.each do |device|
         puts "#{device.id}: \"#{device.name}\" (type #{device.type}, id #{device.model_id})"
       end
     end
@@ -202,7 +202,7 @@ class LG < Thor
 
     @logger.debug client
 
-    client.devices.each do |device|
+    client.devices&.each do |device|
       mon client, device.id
     end
   end
