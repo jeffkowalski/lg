@@ -187,7 +187,7 @@ class LG < Thor
     # Log in if we don't already have an authentication
     raise WIDEQ::NotLoggedInError unless client._auth
 
-    begin
+    with_rescue([RestClient::Exceptions::ReadTimeout], @logger) do |_try|
       ls client
     rescue WIDEQ::NotLoggedInError
       @logger.info 'Session expired, refreshing'
