@@ -4,56 +4,11 @@
 # HACK: use local config to downgrade ssl version to accomodate LG server
 ENV['OPENSSL_CONF'] = 'openssl.cnf'
 
-require 'logger'
-require 'wideq'
-require 'influxdb'
-require 'thor'
-require 'yaml'
+require 'rubygems'
+require 'bundler/setup'
+Bundler.require(:default)
 
-LOGFILE = File.join(Dir.home, '.log', 'lg.log')
-CREDENTIALS_PATH = File.join(Dir.home, '.credentials', 'lg.yaml')
-
-module Kernel
-  def with_rescue(exceptions, logger, retries: 5)
-    try = 0
-    begin
-      yield try
-    rescue *exceptions => e
-      try += 1
-      raise if try > retries
-
-      logger.info "caught error #{e.class}, retrying (#{try}/#{retries})..."
-      retry
-    end
-  end
-end
-
-class LG < Thor
-  no_commands do
-    def redirect_output
-      unless LOGFILE == 'STDOUT'
-        logfile = File.expand_path(LOGFILE)
-        FileUtils.mkdir_p(File.dirname(logfile), mode: 0o755)
-        FileUtils.touch logfile
-        File.chmod 0o644, logfile
-        $stdout.reopen logfile, 'a'
-      end
-      $stderr.reopen $stdout
-      $stdout.sync = $stderr.sync = true
-    end
-
-    def setup_logger
-      redirect_output if options[:log]
-
-      @logger = Logger.new $stdout
-      @logger.level = options[:verbose] ? Logger::DEBUG : Logger::INFO
-      @logger.info 'starting'
-    end
-  end
-
-  class_option :log,     type: :boolean, default: true, desc: "log output to #{LOGFILE}"
-  class_option :verbose, type: :boolean, aliases: '-v', desc: 'increase verbosity'
-
+class LG < RecorderBotBase
   ##
   # Interactively authorize the application
   desc 'authorize', '[re]authorize the application'
@@ -66,8 +21,8 @@ class LG < Thor
     puts 'Then paste the URL where the browser is redirected:'
     callback_url = $stdin.gets.chomp
     client._auth = WIDEQ::Auth.from_url gateway, callback_url
-    state = client.dump
-    File.open(CREDENTIALS_PATH, 'w') { |file| file.write state.to_yaml }
+    state = client.dump.to_yaml
+    store_credentials state
   end
 
   ##
@@ -170,40 +125,38 @@ class LG < Thor
     end # def mon
   end # no_commands
 
-  desc 'record-status', 'record the current usage data to database'
-  method_option :dry_run, type: :boolean, aliases: '-n', desc: "don't log to database"
-  def record_status
-    setup_logger
+  no_commands do
+    def main
+      begin
+        state = load_credentials
+      rescue StandardError
+        state = {}
+      end
 
-    begin
-      state = YAML.load_file CREDENTIALS_PATH
-    rescue StandardError
-      state = {}
-    end
+      client = WIDEQ::Client.load(state)
+      @logger.debug state
+      @logger.debug client._auth
+      # Log in if we don't already have an authentication
+      raise WIDEQ::NotLoggedInError unless client._auth
 
-    client = WIDEQ::Client.load(state)
-    @logger.debug state
-    @logger.debug client._auth
-    # Log in if we don't already have an authentication
-    raise WIDEQ::NotLoggedInError unless client._auth
+      with_rescue([RestClient::Exceptions::ReadTimeout], @logger) do |_try|
+        ls client
+      rescue WIDEQ::NotLoggedInError
+        @logger.info 'Session expired, refreshing'
+        client.refresh
+      rescue StandardError => e
+        @logger.error e
+      end
 
-    with_rescue([RestClient::Exceptions::ReadTimeout], @logger) do |_try|
-      ls client
-    rescue WIDEQ::NotLoggedInError
-      @logger.info 'Session expired, refreshing'
-      client.refresh
-    rescue StandardError => e
-      @logger.error e
-    end
+      # Save the updated state.
+      state = client.dump.to_yaml
+      store_credentials state
 
-    # Save the updated state.
-    state = client.dump
-    File.open(CREDENTIALS_PATH, 'w') { |file| file.write state.to_yaml }
+      @logger.debug client
 
-    @logger.debug client
-
-    client.devices&.each do |device|
-      mon client, device.id
+      client.devices&.each do |device|
+        mon client, device.id
+      end
     end
   end
 end
