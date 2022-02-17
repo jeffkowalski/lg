@@ -21,7 +21,7 @@ class LG < RecorderBotBase
     puts 'Then paste the URL where the browser is redirected:'
     callback_url = $stdin.gets.chomp
     client._auth = WIDEQ::Auth.from_url gateway, callback_url
-    state = client.dump.to_yaml
+    state = client.dump
     store_credentials state
   end
 
@@ -133,8 +133,8 @@ class LG < RecorderBotBase
         state = {}
       end
 
-      client = WIDEQ::Client.load(state)
       @logger.debug state
+      client = WIDEQ::Client.load(state)
       @logger.debug client._auth
       # Log in if we don't already have an authentication
       raise WIDEQ::NotLoggedInError unless client._auth
@@ -149,7 +149,7 @@ class LG < RecorderBotBase
       end
 
       # Save the updated state.
-      state = client.dump.to_yaml
+      state = client.dump
       store_credentials state
 
       @logger.debug client
