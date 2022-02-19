@@ -29,8 +29,10 @@ class LG < RecorderBotBase
   # List the client devices
   no_commands do
     def ls(client)
-      client.devices&.each do |device|
-        puts "#{device.id}: \"#{device.name}\" (type #{device.type}, id #{device.model_id})"
+      with_rescue([RestClient::Exceptions::ReadTimeout, SocketError], @logger) do |_try|
+        client.devices&.each do |device|
+          puts "#{device.id}: \"#{device.name}\" (type #{device.type}, id #{device.model_id})"
+        end
       end
     end
   end
