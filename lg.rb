@@ -157,7 +157,11 @@ class LG < RecorderBotBase
       @logger.debug client
 
       client.devices&.each do |device|
-        mon client, device.id
+        with_rescue([RestClient::Exceptions::ReadTimeout], @logger) do |_try|
+          mon client, device.id
+        rescue StandardError => e
+          @logger.error e
+        end
       end
     end
   end
