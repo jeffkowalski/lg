@@ -29,10 +29,8 @@ class LG < RecorderBotBase
   # List the client devices
   no_commands do
     def ls(client)
-      with_rescue([RestClient::Exceptions::ReadTimeout, SocketError], @logger) do |_try|
-        client.devices&.each do |device|
-          puts "#{device.id}: \"#{device.name}\" (type #{device.type}, id #{device.model_id})"
-        end
+      client.devices&.each do |device|
+        puts "#{device.id}: \"#{device.name}\" (type #{device.type}, id #{device.model_id})"
       end
     end
   end
@@ -141,7 +139,9 @@ class LG < RecorderBotBase
       # Log in if we don't already have an authentication
       raise WIDEQ::NotLoggedInError unless client._auth
 
-      with_rescue([RestClient::Exceptions::OpenTimeout, RestClient::Exceptions::ReadTimeout], @logger) do |_try|
+      soft_faults = [RestClient::Exceptions::OpenTimeout, RestClient::Exceptions::ReadTimeout, SocketError]
+
+      with_rescue(soft_faults, @logger) do |_try|
         ls client
       rescue WIDEQ::NotLoggedInError
         @logger.info 'Session expired, refreshing'
@@ -157,7 +157,7 @@ class LG < RecorderBotBase
       @logger.debug client
 
       client.devices&.each do |device|
-        with_rescue([RestClient::Exceptions::OpenTimeout, RestClient::Exceptions::ReadTimeout], @logger) do |_try|
+        with_rescue(soft_faults, @logger) do |_try|
           mon client, device.id
         rescue StandardError => e
           @logger.error e
