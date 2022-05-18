@@ -143,6 +143,7 @@ class LG < RecorderBotBase
                      Net::ReadTimeout,
                      RestClient::Exceptions::OpenTimeout,
                      RestClient::Exceptions::ReadTimeout,
+                     RestClient::ServerBrokeConnection,
                      SocketError]
 
       begin
@@ -153,7 +154,6 @@ class LG < RecorderBotBase
         @logger.info 'Session expired, refreshing'
         client.refresh
       rescue StandardError => e
-        @logger.error 'Rescuing a StandardError after call to ls **************************'
         @logger.error e
       end
 
@@ -169,7 +169,6 @@ class LG < RecorderBotBase
             mon client, device.id
           end
         rescue StandardError => e
-          @logger.error 'Rescuing a StandardError after call to mon **************************'
           @logger.error e.full_message
         end
       end
