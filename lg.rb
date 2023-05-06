@@ -4,7 +4,6 @@
 # HACK: use local config to downgrade ssl version to accomodate LG server
 ENV['OPENSSL_CONF'] = 'openssl.cnf'
 
-require 'rubygems'
 require 'bundler/setup'
 Bundler.require(:default)
 
