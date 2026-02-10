@@ -39,7 +39,9 @@ class LG < RecorderBotBase
   no_commands do
     def mon(client, device_id)
       device = client.get_device(device_id)
-      model = client.model_info device
+      model = with_rescue([Errno::ENETUNREACH], @logger) do |_try|
+        client.model_info device
+      end
 
       influxdb = InfluxDB::Client.new 'lge' unless options[:dry_run]
       tags = { device_id: device.id,
