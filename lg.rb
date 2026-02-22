@@ -169,6 +169,10 @@ class LG < RecorderBotBase
           with_rescue(soft_faults, @logger) do |_try|
             mon client, device.id
           end
+        rescue WIDEQ::NotLoggedInError
+          @logger.info 'Session expired during monitoring, refreshing'
+          client.refresh
+          retry
         rescue StandardError => e
           @logger.error e.full_message
         end
