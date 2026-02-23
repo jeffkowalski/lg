@@ -55,7 +55,7 @@ class LG < RecorderBotBase
         mon.start
         begin
           got_data = false
-          until got_data
+          30.times do
             sleep 1
             @logger.info 'polling...'
             data = mon.poll
@@ -99,7 +99,9 @@ class LG < RecorderBotBase
                 end
               end
             end
+            break
           end
+          @logger.info "#{device.name}: no data received after 30s" unless got_data
         ensure
           mon.stop
         end
@@ -165,14 +167,19 @@ class LG < RecorderBotBase
       @logger.debug client
 
       client.devices&.each do |device|
+        mon_retries = 0
         begin
           with_rescue(soft_faults, @logger) do |_try|
             mon client, device.id
           end
         rescue WIDEQ::NotLoggedInError
-          @logger.info 'Session expired during monitoring, refreshing'
-          client.refresh
-          retry
+          mon_retries += 1
+          if mon_retries <= 3
+            @logger.info 'Session expired during monitoring, refreshing'
+            client.refresh
+            retry
+          end
+          @logger.warn "#{device.name}: giving up after #{mon_retries} session refreshes"
         rescue StandardError => e
           @logger.error e.full_message
         end
